@@ -3,12 +3,11 @@
 import pandas as pd
 import multiprocessing as mp
 from datetime import datetime
-from options_backtest_nifty import backtest_options  # Importing from the options backtest module
-nifty_options_data=pd.read_pickle('Nifty_MonthlyI_Opt2019.pkl')
-nifty_index_data=pd.read_csv('nifty_combined_sorted_data.csv')
+from backtest_nifty import backtest_options  # Importing from the options backtest module
+
 
 # Define tickers
-tickers = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "HINDUNILVR", "KOTAKBANK", "SBIN",
+tickers =  ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "HINDUNILVR", "KOTAKBANK", "SBIN",
            "BHARTIARTL", "ITC", "ASIANPAINT", "BAJFINANCE", "MARUTI", "AXISBANK", "LT", "HCLTECH",
            "SUNPHARMA", "WIPRO", "ULTRACEMCO", "TITAN", "TECHM", "NESTLEIND", "JSWSTEEL", "TATASTEEL",
            "POWERGRID", "ONGC", "COALINDIA", "INDUSINDBK", "BAJAJFINSV", "GRASIM", "CIPLA", "ADANIPORTS",
@@ -18,9 +17,9 @@ tickers = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "HINDUNILVR", "KO
 # Strategy Parameters
 sl = 2  # Stop loss percentage
 max_reentries = 0  # Limit the number of re-entries
-dte = 20
+dte = 5
 target_delta = 0.35
-option_type = "call"
+option_type = "put"
 mode = "sell"
 mode_nifty = "buy"
 reentry_type = "asap"
@@ -33,6 +32,10 @@ warnings.simplefilter(action="ignore", category=pd.errors.SettingWithCopyWarning
 def run_options_backtest(ticker):
     equity_data = pd.read_csv(f'Stocks_Data/{ticker}_EQ_EOD.csv')
     options_data = pd.read_csv(f'Stocks_Data/{ticker}_Opt_EOD.csv')
+    options_data['Date'] = pd.to_datetime(options_data['Date']).dt.strftime('%Y-%m-%d')
+
+    nifty_options_data=pd.read_pickle('Nifty_MonthlyI_Opt2019.pkl')
+    nifty_index_data=pd.read_csv('nifty_combined_sorted_data.csv')
 
     # Set the start and end dates for backtesting
     start_date_eq = equity_data['Date'].iloc[0]
@@ -44,23 +47,22 @@ def run_options_backtest(ticker):
 
     # Run the options backtest
     try:
-        options_trades = backtest_options(stock_ticker, equity_data, options_data,nifty_options_data,nifty_index_data, start_date, end_date, total_exposure, dte, sl, target_delta = target_delta, max_reentries=max_reentries, reentry_type = reentry_type, option_type=option_type)
+        options_trades = backtest_options(stock_ticker, equity_data, options_data,nifty_index_data,nifty_options_data, start_date, end_date, total_exposure, dte, sl, target_delta = target_delta, max_reentries=max_reentries, reentry_type = reentry_type, option_type=option_type)
         options_trades_df = pd.DataFrame(options_trades)
 
         # Calculate final PNL
-        final_options_pnl = options_trades_df['Options PNL'].sum() + options_trades_df['Nifty Options PNL'].sum()
+        final_options_pnl = options_trades_df['Options PNL'].sum()
+        final_nifty_options_pnl = options_trades_df['Nifty Options PNL'].sum()
 
         print(f"Options Backtest for {ticker}: PNL: {final_options_pnl}")
 
         return {
             "ticker": ticker,
-            "Options PNL": final_options_pnl,
             "Options Tradebook": options_trades_df
         }
     except:
         return {
             "ticker": ticker,
-            "Options PNL": 0,
             "Options Tradebook": pd.DataFrame()
         }
 
@@ -72,7 +74,7 @@ def calculate_max_drawdown(cumulative_pnl):
 
 # Use multiprocessing to run the options backtest in parallel
 if __name__ == "__main__":
-    pool = mp.Pool(mp.cpu_count())  # Use all available CPU cores
+    pool = mp.Pool(mp.cpu_count()-10)  # Use all available CPU cores
 
     # Map the tickers to the run_options_backtest function
     results = pool.map(run_options_backtest, tickers)
@@ -88,12 +90,11 @@ if __name__ == "__main__":
         options_tradebook_df = pd.concat([options_tradebook_df, result['Options Tradebook']], ignore_index=True)
 
     # Save the options tradebook to CSV
-    options_tradebook_df.to_csv("Tradebooks/Options_Tradebook_"+option_type+"_" + str(sl)+"_"+str(dte)+str(target_delta)+"_BUY_NiftyHedge"+".csv", index=False)
-
+    options_tradebook_df.to_csv("Options_Tradebook/Options_Tradebook_"+option_type+"_" + str(sl)+"_"+str(dte)+str(target_delta)+"_BUY_NiftyHedge"+".csv", index=False)
+    print(options_tradebook_df.head())
     if mode == "buy":
         options_tradebook_df['Options PNL'] = options_tradebook_df['Options PNL']*-1 
     if mode_nifty == "buy":
-        print("Nifty Options Buy")
         options_tradebook_df['Nifty Options PNL'] = options_tradebook_df['Nifty Options PNL']*-1
 
     # Calculate and print the total PNL for all stocks
@@ -101,9 +102,9 @@ if __name__ == "__main__":
     print(f"\nTotal Combined Options PNL for all stocks: {total_options_pnl:.2f}")
 
     # Add 'Year' and 'Month' columns to calculate yearly and monthly PNL
-    options_tradebook_df['Option Open Date'] = pd.to_datetime(options_tradebook_df['Option Open Date'])
-    options_tradebook_df['Year'] = options_tradebook_df['Option Open Date'].dt.year
-    options_tradebook_df['Month'] = options_tradebook_df['Option Open Date'].dt.to_period('M')
+    options_tradebook_df['Option Close Date'] = pd.to_datetime(options_tradebook_df['Option Close Date'])
+    options_tradebook_df['Year'] = options_tradebook_df['Option Close Date'].dt.year
+    options_tradebook_df['Month'] = options_tradebook_df['Option Close Date'].dt.to_period('M')
 
     # Group by 'Year' and sum the PNL for yearly PNL
     yearly_pnl_df = options_tradebook_df.groupby('Year').agg({
@@ -112,11 +113,11 @@ if __name__ == "__main__":
     }).reset_index()
 
     # Group by 'Month' and sum the PNL for monthly PNL
-    monthly_pnl_df = options_tradebook_df.groupby('Month').agg({
+    monthly_pnl_df = options_tradebook_df.groupby(['Year','Month']).agg({
         'Options PNL': 'sum',
         'Nifty Options PNL': 'sum'
     }).reset_index()
-    monthly_pnl_df.to_csv("Call_Sell_Monthly_PNL"+str(dte)+" "+str(target_delta)+"_BUY_NiftyHedge"+".csv")
+    monthly_pnl_df.to_csv("Options_Tradebook/Monthly_PNL"+option_type+"_" + str(sl)+"_"+str(dte)+str(target_delta)+"_BUY_NiftyHedge"+".csv")
     # Calculate cumulative P&L for max drawdown
     cum_pnl = monthly_pnl_df['Options PNL'].cumsum() + monthly_pnl_df['Nifty Options PNL'].cumsum()
 

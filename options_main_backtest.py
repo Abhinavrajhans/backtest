@@ -16,7 +16,7 @@ tickers = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "HINDUNILVR", "KO
 # Strategy Parameters
 sl = 2  # Stop loss percentage
 max_reentries = 0  # Limit the number of re-entries
-dte = 20   
+dte = 30
 target_delta = 0.35
 option_type = "call"
 mode = "sell"
@@ -30,6 +30,8 @@ warnings.simplefilter(action="ignore", category=pd.errors.SettingWithCopyWarning
 def run_options_backtest(ticker):
     equity_data = pd.read_csv(f'Stocks_Data/{ticker}_EQ_EOD.csv')
     options_data = pd.read_csv(f'Stocks_Data/{ticker}_Opt_EOD.csv')
+    options_data['Date'] = pd.to_datetime(options_data['Date']).dt.strftime('%Y-%m-%d')
+
 
     # Set the start and end dates for backtesting
     start_date_eq = equity_data['Date'].iloc[0]
@@ -69,7 +71,7 @@ def calculate_max_drawdown(cumulative_pnl):
 
 # Use multiprocessing to run the options backtest in parallel
 if __name__ == "__main__":
-    pool = mp.Pool(mp.cpu_count())  # Use all available CPU cores
+    pool = mp.Pool(mp.cpu_count()-10)  # Use all available CPU cores
 
     # Map the tickers to the run_options_backtest function
     results = pool.map(run_options_backtest, tickers)
@@ -85,7 +87,7 @@ if __name__ == "__main__":
         options_tradebook_df = pd.concat([options_tradebook_df, result['Options Tradebook']], ignore_index=True)
 
     # Save the options tradebook to CSV
-    options_tradebook_df.to_csv("Tradebooks/Options_Tradebook_"+option_type+"_" + str(sl)+"_"+str(dte)+str(target_delta)+".csv", index=False)
+    options_tradebook_df.to_csv("Options_Tradebook_updated/Options_Tradebook_"+option_type+"_" + str(sl)+"_"+str(dte)+"_"+str(target_delta)+".csv", index=False)
 
     if mode == "buy":
         options_tradebook_df['Options PNL'] = options_tradebook_df['Options PNL']*-1
@@ -107,7 +109,7 @@ if __name__ == "__main__":
     monthly_pnl_df = options_tradebook_df.groupby('Month').agg({
         'Options PNL': 'sum'
     }).reset_index()
-    monthly_pnl_df.to_csv("Call_Sell_Monthly_PNL"+str(dte)+" "+str(target_delta)+".csv")
+    monthly_pnl_df.to_csv(f"Options_Tradebook_updated/{option_type}_Sell_Monthly_PNL"+"_" + str(sl)+"_"+str(dte)+"_"+str(target_delta)+".csv")
     # Calculate cumulative P&L for max drawdown
     cum_pnl = monthly_pnl_df['Options PNL'].cumsum()
 

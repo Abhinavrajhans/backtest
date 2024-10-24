@@ -101,33 +101,6 @@ def backtest_options(stock_ticker, equity_data, options_data, start_date, end_da
                         #print("Intraday SL got hit on " + date)
 
 
-                # Re-entry logic: Check if price goes below original entry price after SL hit, and re-entry count is within the limit
-                if re_entry_open and option_open is False and reentry_count < max_reentries:
-                    if reentry_type == "cost":
-                        option_price_close = get_option_price(options_for_date, current_position['Option Strike'], option_type, 'Close')
-                        if option_price_close <= option_entry_price:
-                            current_position['Re-entry'] = True
-                            current_position['Reentry Count'] = reentry_count
-                            current_position['Option Open Date'] = date
-                            current_position['Option Initial Price'] = option_price_close
-                            current_position['Reentry Count'] = reentry_count + 1
-                            option_open = True
-                            reentry_count += 1  # Increment the re-entry count
-                            re_entry_open = False  # Reset re-entry flag
-                    elif reentry_type == "asap":
-                        option_target_delta = find_option_by_delta(options_for_date, date, spot_price, time_to_maturity, volatility, target_delta, option_type)
-                        option_initial_price = option_target_delta['Close']
-                        option_entry_price = option_initial_price  # Store the original entry price for re-entry
-                        current_position['Re-entry'] = True
-                        current_position['Reentry Count'] = reentry_count
-                        current_position['Option Open Date'] = date
-                        current_position['Option Strike'] = option_target_delta['Strike Price']
-                        current_position['Option Initial Price'] = option_initial_price
-                        current_position['Reentry Count'] = reentry_count + 1
-                        option_open = True
-                        reentry_count += 1  # Increment the re-entry count
-                        re_entry_open = False  # Reset re-entry flag
-
                 # End of the month - Close all open positions
                 if not is_expiry and calculate_time_to_expiry(date) == 1:
                     next_day = pd.to_datetime(date) + timedelta(days=1)
